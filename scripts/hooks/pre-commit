@@ -1,0 +1,39 @@
+#!/bin/sh
+# UMS pre-commit hook (POSIX sh; works in Git Bash on Windows).
+# 1. Fast gate: Spotless check, compile, unit + property + ArchUnit tests.
+# 2. Secret scan of staged changes with gitleaks, if installed (CI always enforces it).
+# Install with: sh scripts/install-hooks.sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+# A JAVA_HOME pointing at a deleted JDK makes mvn abort; ignore it so mvn uses java on PATH.
+if [ -n "${JAVA_HOME:-}" ] && [ ! -d "$JAVA_HOME" ]; then
+  echo "pre-commit: WARNING JAVA_HOME ($JAVA_HOME) does not exist; using java from PATH." >&2
+  unset JAVA_HOME
+fi
+
+# Prefer mvn on PATH; fall back to a project-local Maven under .tools/ if present.
+if command -v mvn >/dev/null 2>&1; then
+  MVN=mvn
+else
+  MVN=$(ls -d .tools/apache-maven-*/bin/mvn 2>/dev/null | head -n 1 || true)
+fi
+if [ -z "${MVN:-}" ]; then
+  echo "pre-commit: Maven not found (install Maven 3.9+ or put it on PATH)." >&2
+  exit 1
+fi
+
+echo "pre-commit: running '$MVN -q -Pfast verify' ..."
+if ! "$MVN" -q -Pfast verify; then
+  echo "pre-commit: fast gate failed. Fix the errors above (formatting: mvn spotless:apply)." >&2
+  exit 1
+fi
+
+if command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: scanning staged changes with gitleaks ..."
+  gitleaks protect --staged --redact
+else
+  echo "pre-commit: WARNING gitleaks not on PATH; secret scan skipped locally (CI enforces it)." >&2
+fi

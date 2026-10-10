@@ -54,6 +54,33 @@
     <!-- Build plugins (master prompt §3) -->
     <enforcer-plugin.version>3.6.3</enforcer-plugin.version>
     <exec-plugin.version>3.6.4</exec-plugin.version>
+    <spotless-plugin.version>3.10.4</spotless-plugin.version>
+    <!-- 1.37.0 is newer but fails inside spotless 3.10.4 (InvocationTargetException); 1.36.1 is the newest that works. -->
+    <google-java-format.version>1.36.1</google-java-format.version>
+    <checkstyle-plugin.version>3.6.0</checkstyle-plugin.version>
+    <checkstyle.version>14.3.0</checkstyle.version>
+    <spotbugs-plugin.version>4.10.4.1</spotbugs-plugin.version>
+    <spotbugs.version>4.10.4</spotbugs.version>
+    <findsecbugs.version>1.14.0</findsecbugs.version>
+    <jacoco-plugin.version>0.8.15</jacoco-plugin.version>
+    <pitest-plugin.version>1.30.0</pitest-plugin.version>
+    <pitest-junit5.version>1.2.3</pitest-junit5.version>
+    <dependency-check-plugin.version>13.0.0</dependency-check-plugin.version>
+    <license-plugin.version>2.7.1</license-plugin.version>
+
+    <!-- Shared config location (anchored by .mvn/) -->
+    <ums.config.dir>${maven.multiModuleProjectDirectory}/config</ums.config.dir>
+
+    <!-- Gate switches (overridden by profiles) -->
+    <skipITs>false</skipITs>
+    <checkstyle.skip>false</checkstyle.skip>
+    <spotbugs.skip>false</spotbugs.skip>
+    <jacoco.skip>false</jacoco.skip>
+    <license.skipAddThirdParty>false</license.skipAddThirdParty>
+
+    <!-- Test JVM: JaCoCo prepends its agent to argLine; Mockito's inline mock maker runs as an agent on JDK 21+ -->
+    <argLine/>
+    <mockito.agent>${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</mockito.agent>
 
     <!-- Project settings -->
     <ums.concurrency.repeats>1</ums.concurrency.repeats>
@@ -166,6 +193,40 @@
     </dependencies>
   </dependencyManagement>
 
+  <!-- Test toolkit available to every module (test scope only). -->
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.jqwik</groupId>
+      <artifactId>jqwik</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
   <build>
     <pluginManagement>
       <plugins>
@@ -196,11 +257,29 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
           <version>${surefire.version}</version>
+          <configuration>
+            <includes>
+              <include>**/*Test.java</include>
+            </includes>
+            <argLine>@{argLine} -javaagent:${mockito.agent} -Xshare:off</argLine>
+            <systemPropertyVariables>
+              <ums.concurrency.repeats>${ums.concurrency.repeats}</ums.concurrency.repeats>
+            </systemPropertyVariables>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-failsafe-plugin</artifactId>
           <version>${failsafe.version}</version>
+          <configuration>
+            <includes>
+              <include>**/*IT.java</include>
+            </includes>
+            <argLine>@{argLine} -javaagent:${mockito.agent} -Xshare:off</argLine>
+            <systemPropertyVariables>
+              <ums.concurrency.repeats>${ums.concurrency.repeats}</ums.concurrency.repeats>
+            </systemPropertyVariables>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -232,10 +311,234 @@
           <artifactId>exec-maven-plugin</artifactId>
           <version>${exec-plugin.version}</version>
         </plugin>
+        <plugin>
+          <groupId>com.diffplug.spotless</groupId>
+          <artifactId>spotless-maven-plugin</artifactId>
+          <version>${spotless-plugin.version}</version>
+          <configuration>
+            <java>
+              <googleJavaFormat>
+                <version>${google-java-format.version}</version>
+                <style>GOOGLE</style>
+              </googleJavaFormat>
+              <removeUnusedImports/>
+            </java>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-checkstyle-plugin</artifactId>
+          <version>${checkstyle-plugin.version}</version>
+          <dependencies>
+            <dependency>
+              <groupId>com.puppycrawl.tools</groupId>
+              <artifactId>checkstyle</artifactId>
+              <version>${checkstyle.version}</version>
+            </dependency>
+          </dependencies>
+          <configuration>
+            <configLocation>${ums.config.dir}/checkstyle/checkstyle.xml</configLocation>
+            <consoleOutput>true</consoleOutput>
+            <failOnViolation>true</failOnViolation>
+            <violationSeverity>warning</violationSeverity>
+            <includeTestSourceDirectory>false</includeTestSourceDirectory>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>com.github.spotbugs</groupId>
+          <artifactId>spotbugs-maven-plugin</artifactId>
+          <version>${spotbugs-plugin.version}</version>
+          <dependencies>
+            <dependency>
+              <groupId>com.github.spotbugs</groupId>
+              <artifactId>spotbugs</artifactId>
+              <version>${spotbugs.version}</version>
+            </dependency>
+          </dependencies>
+          <configuration>
+            <effort>Max</effort>
+            <threshold>Medium</threshold>
+            <failThreshold>High</failThreshold>
+            <excludeFilterFile>${ums.config.dir}/spotbugs/exclude.xml</excludeFilterFile>
+            <plugins>
+              <plugin>
+                <groupId>com.h3xstream.findsecbugs</groupId>
+                <artifactId>findsecbugs-plugin</artifactId>
+                <version>${findsecbugs.version}</version>
+              </plugin>
+            </plugins>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>license-maven-plugin</artifactId>
+          <version>${license-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.pitest</groupId>
+          <artifactId>pitest-maven</artifactId>
+          <version>${pitest-plugin.version}</version>
+          <dependencies>
+            <dependency>
+              <groupId>org.pitest</groupId>
+              <artifactId>pitest-junit5-plugin</artifactId>
+              <version>${pitest-junit5.version}</version>
+            </dependency>
+          </dependencies>
+        </plugin>
+        <plugin>
+          <groupId>org.owasp</groupId>
+          <artifactId>dependency-check-maven</artifactId>
+          <version>${dependency-check-plugin.version}</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
     <plugins>
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>spotless-check</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>checkstyle-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>jacoco-prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>jacoco-report</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>jacoco-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <haltOnFailure>true</haltOnFailure>
+              <rules>
+                <rule>
+                  <element>PACKAGE</element>
+                  <includes>
+                    <include>edu.ums.platform*</include>
+                    <include>*.service*</include>
+                    <include>*.domain*</include>
+                  </includes>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.80</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>integration-tests</id>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>spotbugs-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>license-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>third-party-licences</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>add-third-party</goal>
+            </goals>
+            <configuration>
+              <excludedGroups>edu\.ums.*</excludedGroups>
+              <failOnMissing>true</failOnMissing>
+              <failOnBlacklist>true</failOnBlacklist>
+              <includedLicenses>
+                <includedLicense>Apache-2.0</includedLicense>
+                <includedLicense>MIT</includedLicense>
+                <includedLicense>BSD-2-Clause</includedLicense>
+                <includedLicense>BSD-3-Clause</includedLicense>
+                <includedLicense>EPL-1.0</includedLicense>
+                <includedLicense>EPL-2.0</includedLicense>
+                <includedLicense>LGPL-2.1</includedLicense>
+                <includedLicense>PostgreSQL</includedLicense>
+                <includedLicense>ISC</includedLicense>
+                <includedLicense>EUPL-1.1</includedLicense>
+                <includedLicense>GPL-2.0-with-classpath-exception</includedLicense>
+              </includedLicenses>
+              <licenseMerges>
+                <licenseMerge>Apache-2.0|Apache License, Version 2.0|The Apache License, Version 2.0|The Apache Software License, Version 2.0|Apache License 2.0|Apache 2.0|Apache 2|Apache-2.0 License|Apache License Version 2.0</licenseMerge>
+                <licenseMerge>MIT|MIT License|The MIT License|The MIT License (MIT)|MIT license</licenseMerge>
+                <licenseMerge>BSD-2-Clause|BSD 2-Clause License|The BSD 2-Clause License|BSD-2-Clause License</licenseMerge>
+                <licenseMerge>BSD-3-Clause|BSD 3-Clause License|The BSD 3-Clause License|BSD License 3|New BSD License|Revised BSD License</licenseMerge>
+                <licenseMerge>EPL-1.0|Eclipse Public License - v 1.0|Eclipse Public License v1.0|Eclipse Public License 1.0</licenseMerge>
+                <licenseMerge>EPL-2.0|Eclipse Public License v2.0|Eclipse Public License - v 2.0|Eclipse Public License 2.0|EPL 2.0</licenseMerge>
+                <licenseMerge>LGPL-2.1|GNU Lesser General Public License|GNU Lesser General Public License, Version 2.1|LGPL 2.1</licenseMerge>
+                <licenseMerge>GPL-2.0-with-classpath-exception|GPL2 w/ CPE|GNU General Public License, version 2 with the GNU Classpath Exception</licenseMerge>
+              </licenseMerges>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
@@ -271,4 +574,77 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!-- fast: Spotless check, compile, Surefire (unit + property + ArchUnit). Used by the pre-commit hook. -->
+    <profile>
+      <id>fast</id>
+      <properties>
+        <skipITs>true</skipITs>
+        <checkstyle.skip>true</checkstyle.skip>
+        <spotbugs.skip>true</spotbugs.skip>
+        <jacoco.skip>true</jacoco.skip>
+        <license.skipAddThirdParty>true</license.skipAddThirdParty>
+      </properties>
+    </profile>
+
+    <!-- nightly: default gate with concurrency tests repeated 50 times. -->
+    <profile>
+      <id>nightly</id>
+      <properties>
+        <ums.concurrency.repeats>50</ums.concurrency.repeats>
+      </properties>
+    </profile>
+
+    <!-- release: default gate + mutation testing (>= 70 % on service/domain) + OWASP Dependency-Check (CVSS >= 7 fails). -->
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-maven</artifactId>
+            <executions>
+              <execution>
+                <id>mutation-coverage</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>mutationCoverage</goal>
+                </goals>
+                <configuration>
+                  <targetClasses>
+                    <param>edu.ums.*.service.*</param>
+                    <param>edu.ums.*.*.service.*</param>
+                    <param>edu.ums.*.domain.*</param>
+                    <param>edu.ums.*.*.domain.*</param>
+                  </targetClasses>
+                  <mutationThreshold>70</mutationThreshold>
+                  <failWhenNoMutations>false</failWhenNoMutations>
+                  <timestampedReports>false</timestampedReports>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.owasp</groupId>
+            <artifactId>dependency-check-maven</artifactId>
+            <executions>
+              <execution>
+                <id>dependency-check</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>check</goal>
+                </goals>
+                <configuration>
+                  <failBuildOnCVSS>7</failBuildOnCVSS>
+                  <nvdApiKeyEnvironmentVariable>NVD_API_KEY</nvdApiKeyEnvironmentVariable>
+                  <skipTestScope>true</skipTestScope>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
