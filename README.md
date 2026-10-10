@@ -52,3 +52,19 @@ trust authentication. Binaries are found via `UMS_PG_BIN`, then the default inst
 | `UMS_DB_PASSWORD`, `UMS_CONSOLE_DB_PASSWORD`, `UMS_LISTENER_DB_PASSWORD`, `UMS_OWNER_DB_PASSWORD`, `UMS_BACKUP_DB_PASSWORD` | runtime ITs that log in as the real roles | printed by `env` (throwaway values, trust auth) |
 
 Then run `mvn verify`.
+
+## CI setup
+
+The pull-request workflow (P0 Step 13) runs a `postgres:18` service container:
+
+- `UMS_TEST_DB_USER` / `UMS_TEST_DB_PASSWORD` are the container's superuser (`POSTGRES_USER` /
+  `POSTGRES_PASSWORD`). Integration tests need it to run `SET ROLE` and Flyway `clean` in `ums_test`.
+- Every role password comes from a GitHub Actions secret and is passed both to
+  `scripts/db/create_roles.sql` (as `-v owner_pw=… -v app_pw=… -v console_pw=… -v listener_pw=… -v backup_pw=…`)
+  and to the tests as `UMS_OWNER_DB_PASSWORD`, `UMS_DB_PASSWORD`, `UMS_CONSOLE_DB_PASSWORD`,
+  `UMS_LISTENER_DB_PASSWORD`, `UMS_BACKUP_DB_PASSWORD`.
+- Required repository secrets: `UMS_CI_POSTGRES_PASSWORD`, `UMS_CI_OWNER_DB_PASSWORD`,
+  `UMS_CI_APP_DB_PASSWORD`, `UMS_CI_CONSOLE_DB_PASSWORD`, `UMS_CI_LISTENER_DB_PASSWORD`,
+  `UMS_CI_BACKUP_DB_PASSWORD`; optional `NVD_API_KEY` for Dependency-Check.
+- GitHub masks secret values in logs automatically; any value the workflow derives or generates is
+  masked with `::add-mask::` before use. Secrets are never echoed.
