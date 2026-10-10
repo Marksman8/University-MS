@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SpotBugs exclusions. Every entry needs a reason and a review (listed in the STOP report). -->
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/3.1.0/spotbugs/etc/findbugsfilter.xsd">
+
+  <!--
+    P0 Step 4. DbAccount deliberately shares its Secret instance: Secret.clear() must zero the one
+    char[] that every holder sees. A defensive copy would leave unzeroed password copies in memory.
+  -->
+  <Match>
+    <Class name="edu.ums.platform.config.AppConfig$DbAccount"/>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
+
+  <!--
+    P0 Step 6. BaseRepository is the Template Method base: subclasses pass constant SQL text and
+    every value is bound through PreparedStatement parameters. The only concatenated identifiers
+    (casState table, keyset columns) are validated by SqlIdentifiers.
+  -->
+  <Match>
+    <Class name="edu.ums.platform.db.BaseRepository"/>
+    <Or>
+      <Method name="queryList"/>
+      <Method name="queryPage"/>
+      <Method name="update"/>
+      <Method name="batch"/>
+    </Or>
+    <Bug pattern="SQL_INJECTION_JDBC"/>
+  </Match>
+
+  <!--
+    P0 Step 6. DataSources exists to share its two pools; Tx exists to share the transaction's
+    connection with repositories. Copies are impossible by design.
+  -->
+  <Match>
+    <Class name="edu.ums.platform.db.DataSources"/>
+    <Or>
+      <Method name="app"/>
+      <Method name="console"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="edu.ums.platform.db.Tx"/>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
+
+  <!--
+    P0 Step 12. TestDatabase.exec runs fixture DDL/DML written by test code as the test-database
+    admin (testkit is a test-scope dependency only). The TRUNCATE it runs for UmsDbExtension is
+    built server-side from the catalog with format('%I.%I').
+  -->
+  <Match>
+    <Class name="edu.ums.testkit.TestDatabase"/>
+    <Method name="exec"/>
+    <Bug pattern="SQL_INJECTION_JDBC,SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE"/>
+  </Match>
+</FindBugsFilter>

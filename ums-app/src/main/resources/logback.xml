@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  UMS logging: console + daily rolling file kept 14 days, UTC timestamps,
+  MDC fields traceId / userId / role on every line. Never log PII, passwords, hashes or tokens.
+  Log directory: UMS_LOG_DIR environment variable (same as ums.log.dir), default ./logs.
+-->
+<configuration scan="false">
+  <property name="LOG_DIR" value="${UMS_LOG_DIR:-logs}"/>
+  <property name="PATTERN"
+            value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} %-5level [%thread] %logger{36} traceId=%X{traceId:-} userId=%X{userId:-} role=%X{role:-} - %msg%n"/>
+
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_DIR}/ums.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <fileNamePattern>${LOG_DIR}/ums.%d{yyyy-MM-dd, UTC}.log</fileNamePattern>
+      <maxHistory>14</maxHistory>
+      <cleanHistoryOnStart>true</cleanHistoryOnStart>
+    </rollingPolicy>
+    <encoder>
+      <pattern>${PATTERN}</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="com.zaxxer.hikari" level="WARN"/>
+  <logger name="org.flywaydb" level="INFO"/>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="FILE"/>
+  </root>
+</configuration>

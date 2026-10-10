@@ -1,0 +1,185 @@
+# UMS CI (P0 Step 13).
+#   push (all branches): fast gate + Gitleaks
+#   pull_request:        full gate on a postgres:18 service, reports uploaded, Dependency-Check if NVD_API_KEY is set
+#   schedule (nightly):  full gate with -Pnightly (concurrency repeats = 50), Dependency-Check, PIT (non-blocking until P7)
+#
+# Integration tests log in as the container superuser (UMS_TEST_DB_USER) and use SET ROLE.
+# Every role password comes from a GitHub secret (README "CI setup"); GitHub masks secret values in logs.
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  schedule:
+    - cron: "30 21 * * *" # 21:30 UTC = 03:00 IST
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: fast gate + gitleaks (push)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: mvn -Pfast verify
+        run: mvn -B -Pfast verify
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  verify:
+    name: full gate on PostgreSQL 18 (pull request)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ secrets.UMS_CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      UMS_TEST_DB_URL: jdbc:postgresql://localhost:5432/ums_test
+      UMS_TEST_DB_USER: postgres
+      UMS_TEST_DB_PASSWORD: ${{ secrets.UMS_CI_POSTGRES_PASSWORD }}
+      UMS_OWNER_DB_PASSWORD: ${{ secrets.UMS_CI_OWNER_DB_PASSWORD }}
+      UMS_DB_PASSWORD: ${{ secrets.UMS_CI_APP_DB_PASSWORD }}
+      UMS_CONSOLE_DB_PASSWORD: ${{ secrets.UMS_CI_CONSOLE_DB_PASSWORD }}
+      UMS_LISTENER_DB_PASSWORD: ${{ secrets.UMS_CI_LISTENER_DB_PASSWORD }}
+      UMS_BACKUP_DB_PASSWORD: ${{ secrets.UMS_CI_BACKUP_DB_PASSWORD }}
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Create ums_test and apply scripts/db/create_roles.sql (psql 18 inside the service container)
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q \
+            -c "CREATE DATABASE ums_test ENCODING 'UTF8'"
+          docker exec -i "$PG_CONTAINER" psql -U postgres -d ums_test -v ON_ERROR_STOP=1 -q \
+            -v owner_pw="$UMS_OWNER_DB_PASSWORD" -v app_pw="$UMS_DB_PASSWORD" \
+            -v console_pw="$UMS_CONSOLE_DB_PASSWORD" -v listener_pw="$UMS_LISTENER_DB_PASSWORD" \
+            -v backup_pw="$UMS_BACKUP_DB_PASSWORD" -f - < scripts/db/create_roles.sql
+      - name: mvn verify
+        run: mvn -B verify
+      - name: Upload test, coverage, SpotBugs and licence reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-pr-${{ github.run_number }}
+          if-no-files-found: ignore
+          path: |
+            **/target/surefire-reports/
+            **/target/failsafe-reports/
+            **/target/site/jacoco/
+            **/target/spotbugsXml.xml
+            **/target/generated-sources/license/THIRD-PARTY.txt
+      - name: OWASP Dependency-Check (only when NVD_API_KEY is set)
+        if: env.NVD_API_KEY != ''
+        run: >-
+          mvn -B -DskipTests -DskipITs
+          org.owasp:dependency-check-maven:check
+          -DfailBuildOnCVSS=7 -DnvdApiKeyEnvironmentVariable=NVD_API_KEY
+
+  nightly:
+    name: nightly (concurrency x50, Dependency-Check, PIT)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ secrets.UMS_CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      UMS_TEST_DB_URL: jdbc:postgresql://localhost:5432/ums_test
+      UMS_TEST_DB_USER: postgres
+      UMS_TEST_DB_PASSWORD: ${{ secrets.UMS_CI_POSTGRES_PASSWORD }}
+      UMS_OWNER_DB_PASSWORD: ${{ secrets.UMS_CI_OWNER_DB_PASSWORD }}
+      UMS_DB_PASSWORD: ${{ secrets.UMS_CI_APP_DB_PASSWORD }}
+      UMS_CONSOLE_DB_PASSWORD: ${{ secrets.UMS_CI_CONSOLE_DB_PASSWORD }}
+      UMS_LISTENER_DB_PASSWORD: ${{ secrets.UMS_CI_LISTENER_DB_PASSWORD }}
+      UMS_BACKUP_DB_PASSWORD: ${{ secrets.UMS_CI_BACKUP_DB_PASSWORD }}
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Create ums_test and apply scripts/db/create_roles.sql
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q \
+            -c "CREATE DATABASE ums_test ENCODING 'UTF8'"
+          docker exec -i "$PG_CONTAINER" psql -U postgres -d ums_test -v ON_ERROR_STOP=1 -q \
+            -v owner_pw="$UMS_OWNER_DB_PASSWORD" -v app_pw="$UMS_DB_PASSWORD" \
+            -v console_pw="$UMS_CONSOLE_DB_PASSWORD" -v listener_pw="$UMS_LISTENER_DB_PASSWORD" \
+            -v backup_pw="$UMS_BACKUP_DB_PASSWORD" -f - < scripts/db/create_roles.sql
+      - name: mvn verify -Pnightly
+        run: mvn -B verify -Pnightly
+      - name: OWASP Dependency-Check (only when NVD_API_KEY is set)
+        if: env.NVD_API_KEY != ''
+        run: >-
+          mvn -B -DskipTests -DskipITs
+          org.owasp:dependency-check-maven:check
+          -DfailBuildOnCVSS=7 -DnvdApiKeyEnvironmentVariable=NVD_API_KEY
+      - name: PIT mutation report (non-blocking until P7)
+        continue-on-error: true
+        run: >-
+          mvn -B -pl ums-platform -am -DskipTests -DskipITs install &&
+          mvn -B -pl ums-platform test-compile org.pitest:pitest-maven:mutationCoverage
+          -DtargetClasses='edu.ums.platform.*' -DtargetTests='edu.ums.platform.*'
+          -DmutationThreshold=0 -DtimestampedReports=false
+      - name: Upload nightly reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-nightly-${{ github.run_number }}
+          if-no-files-found: ignore
+          path: |
+            **/target/surefire-reports/
+            **/target/failsafe-reports/
+            **/target/site/jacoco/
+            **/target/pit-reports/
+            **/target/dependency-check-report.html
