@@ -89,7 +89,30 @@ Package `edu.ums.api`:
   - `app_error_log` (design columns + index on `occurred_at DESC`).
   - `feature_flag (key text PK, enabled boolean not null, updated_by bigint, updated_at timestamptz)` seeded with the five flags, all enabled.
   - `backup_log (id, started_at, finished_at, file_path, size_bytes, verified boolean, outcome, message)`.
-  - `activity_log` + three indexes + `notify_activity()` trigger (from the Dev design), `user_id` FK added in P1.
+  - `activity_log` + three indexes + `notify_activity()` trigger, exactly as below (`user_id` FK to `app_user` added in P1):
+    ```sql
+    CREATE TABLE activity_log (
+      id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      occurred_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+      user_id     BIGINT,                        -- FK to app_user added in P1
+      username    VARCHAR(64),
+      role        VARCHAR(16) NOT NULL CHECK (role IN ('STUDENT','FACULTY','ADMIN','DEV','SYSTEM','ANONYMOUS')),
+      session_id  UUID,
+      action      VARCHAR(64) NOT NULL,
+      entity_type VARCHAR(64),
+      entity_id   VARCHAR(64),
+      outcome     VARCHAR(8)  NOT NULL CHECK (outcome IN ('SUCCESS','FAILURE')),
+      details     JSONB,
+      trace_id    UUID
+    );
+    CREATE INDEX idx_activity_time      ON activity_log (occurred_at DESC, id DESC);
+    CREATE INDEX idx_activity_role_time ON activity_log (role, occurred_at DESC, id DESC);
+    CREATE INDEX idx_activity_user_time ON activity_log (user_id, occurred_at DESC, id DESC);
+    CREATE FUNCTION notify_activity() RETURNS trigger AS $$
+    BEGIN PERFORM pg_notify('ums_activity', NEW.id::text); RETURN NEW; END; $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trg_activity_notify AFTER INSERT ON activity_log
+      FOR EACH ROW EXECUTE FUNCTION notify_activity();
+    ```
   - `change_history (id, occurred_at, actor_id, entity_type, entity_id, before jsonb, after jsonb, reason)` + index `(entity_type, entity_id, occurred_at DESC)`.
 - Tests: migrate blank DB twice (idempotent), `ums_app` cannot `CREATE TABLE`, `ums_dev_console` cannot `INSERT`, NOTIFY fires on insert into `activity_log`.
 
