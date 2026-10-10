@@ -46,7 +46,7 @@ Pin exact latest stable versions in the parent POM (verify each on Maven Central
 
 **Test:** `org.junit.jupiter:junit-jupiter` · `org.assertj:assertj-core` · `org.mockito:mockito-core` + `mockito-junit-jupiter` · `net.jqwik:jqwik` · `com.tngtech.archunit:archunit-junit5`
 
-**Build plugins:** compiler, surefire, failsafe, `maven-enforcer-plugin`, `spotless-maven-plugin` (google-java-format), `maven-checkstyle-plugin`, `spotbugs-maven-plugin` + FindSecBugs, `jacoco-maven-plugin`, `pitest-maven`, `dependency-check-maven`, `license-maven-plugin` (org.codehaus.mojo), `exec-maven-plugin` (org.codehaus.mojo, to run `Main`).
+**Build plugins:** compiler, surefire, failsafe, `maven-enforcer-plugin`, `spotless-maven-plugin` (google-java-format), `maven-checkstyle-plugin`, `spotbugs-maven-plugin` + FindSecBugs, `jacoco-maven-plugin`, `pitest-maven`, `dependency-check-maven`, `license-maven-plugin` (org.codehaus.mojo), `exec-maven-plugin` (org.codehaus.mojo, to run `Main`), `maven-dependency-plugin` (only the `properties` goal, to pass the Mockito agent jar path to Surefire/Failsafe as `-javaagent:${org.mockito:mockito-core:jar}`). Maven's default lifecycle plugins (clean, resources, jar, install, deploy, site) are pinned too.
 
 Nothing else without asking. Banned: Spring, Hibernate/JPA, Lombok, Guava, Apache Commons (unless approved).
 

@@ -53,6 +53,7 @@
 
     <!-- Build plugins (master prompt §3) -->
     <enforcer-plugin.version>3.6.3</enforcer-plugin.version>
+    <dependency-plugin.version>3.11.0</dependency-plugin.version>
     <exec-plugin.version>3.6.4</exec-plugin.version>
     <spotless-plugin.version>3.10.4</spotless-plugin.version>
     <!-- 1.37.0 is newer but fails inside spotless 3.10.4 (InvocationTargetException); 1.36.1 is the newest that works. -->
@@ -78,9 +79,9 @@
     <jacoco.skip>false</jacoco.skip>
     <license.skipAddThirdParty>false</license.skipAddThirdParty>
 
-    <!-- Test JVM: JaCoCo prepends its agent to argLine; Mockito's inline mock maker runs as an agent on JDK 21+ -->
+    <!-- Test JVM: JaCoCo prepends its agent to argLine; Mockito's inline mock maker runs as an agent on JDK 21+.
+         ${org.mockito:mockito-core:jar} is set by maven-dependency-plugin:properties. -->
     <argLine/>
-    <mockito.agent>${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</mockito.agent>
 
     <!-- Project settings -->
     <ums.concurrency.repeats>1</ums.concurrency.repeats>
@@ -261,7 +262,7 @@
             <includes>
               <include>**/*Test.java</include>
             </includes>
-            <argLine>@{argLine} -javaagent:${mockito.agent} -Xshare:off</argLine>
+            <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar} -Xshare:off</argLine>
             <systemPropertyVariables>
               <ums.concurrency.repeats>${ums.concurrency.repeats}</ums.concurrency.repeats>
             </systemPropertyVariables>
@@ -275,7 +276,7 @@
             <includes>
               <include>**/*IT.java</include>
             </includes>
-            <argLine>@{argLine} -javaagent:${mockito.agent} -Xshare:off</argLine>
+            <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar} -Xshare:off</argLine>
             <systemPropertyVariables>
               <ums.concurrency.repeats>${ums.concurrency.repeats}</ums.concurrency.repeats>
             </systemPropertyVariables>
@@ -310,6 +311,11 @@
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>exec-maven-plugin</artifactId>
           <version>${exec-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <version>${dependency-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>com.diffplug.spotless</groupId>
@@ -400,6 +406,19 @@
     </pluginManagement>
 
     <plugins>
+      <!-- Only the 'properties' goal (master prompt §3): exposes ${org.mockito:mockito-core:jar} for the test JVM. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>dependency-properties</id>
+            <goals>
+              <goal>properties</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>com.diffplug.spotless</groupId>
         <artifactId>spotless-maven-plugin</artifactId>
