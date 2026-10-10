@@ -8,6 +8,7 @@ import edu.ums.platform.error.ConstraintErrorMap;
 import edu.ums.platform.error.SqlErrorMapper;
 import edu.ums.platform.error.UmsException;
 import edu.ums.platform.error.ValidationException;
+import edu.ums.testkit.TestDatabase;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -34,22 +35,22 @@ class TransactionIT {
 
   @BeforeAll
   void start() throws SQLException {
-    DbTestSupport.exec("CREATE SCHEMA IF NOT EXISTS ums", ProbeRepository.CREATE_TABLE);
+    TestDatabase.exec("CREATE SCHEMA IF NOT EXISTS ums", ProbeRepository.CREATE_TABLE);
     SqlErrorMapper errors = new SqlErrorMapper(ConstraintErrorMap.standard());
-    pools = DataSources.create(DbTestSupport.config(Duration.ofSeconds(1)), errors);
+    pools = DataSources.create(TestDatabase.config(Duration.ofSeconds(1)), errors);
     tx = new TransactionRunner(pools.app(), errors, new RetryPolicy(new Random(), Sleeper.SYSTEM));
     probes = new ProbeRepository(tx, errors);
   }
 
   @BeforeEach
   void clean() throws SQLException {
-    DbTestSupport.exec("TRUNCATE ums.it_probe RESTART IDENTITY");
+    TestDatabase.exec("TRUNCATE ums.it_probe RESTART IDENTITY");
   }
 
   @AfterAll
   void stop() throws SQLException {
     pools.close();
-    DbTestSupport.exec("DROP TABLE IF EXISTS ums.it_probe");
+    TestDatabase.exec("DROP TABLE IF EXISTS ums.it_probe");
   }
 
   @Test
@@ -130,7 +131,7 @@ class TransactionIT {
   void listenerConnectionUsesSchemaAndAutoCommit() throws SQLException {
     SqlErrorMapper errors = new SqlErrorMapper(ConstraintErrorMap.standard());
     ListenerConnectionFactory factory =
-        new ListenerConnectionFactory(DbTestSupport.config(Duration.ofSeconds(1)), errors);
+        new ListenerConnectionFactory(TestDatabase.config(Duration.ofSeconds(1)), errors);
     try (Connection connection = factory.open();
         Statement st = connection.createStatement();
         ResultSet rs = st.executeQuery("SHOW search_path")) {

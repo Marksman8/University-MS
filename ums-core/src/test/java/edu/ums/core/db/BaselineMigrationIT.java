@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import edu.ums.platform.config.Environment;
 import edu.ums.platform.db.MigrationRunner;
+import edu.ums.testkit.TestDatabase;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -27,7 +28,7 @@ class BaselineMigrationIT {
 
   @BeforeAll
   void migrateBlankSchemaTwice() {
-    runner = new MigrationRunner(CoreDbSupport.owner(), Environment.TEST);
+    runner = new MigrationRunner(TestDatabase.owner(), Environment.TEST);
     runner.clean();
     firstRun = runner.migrate();
     secondRun = runner.migrate();
@@ -42,7 +43,7 @@ class BaselineMigrationIT {
 
   @Test
   void cleanIsRefusedOutsideTest() {
-    MigrationRunner prod = new MigrationRunner(CoreDbSupport.owner(), Environment.PROD);
+    MigrationRunner prod = new MigrationRunner(TestDatabase.owner(), Environment.PROD);
     assertThatThrownBy(prod::clean).hasMessage("INTERNAL_ERROR");
   }
 
@@ -92,7 +93,7 @@ class BaselineMigrationIT {
   @Test
   void activityLogMatchesThePinnedDefinition() throws SQLException {
     Map<String, String> columns = new LinkedHashMap<>();
-    try (Connection c = CoreDbSupport.admin();
+    try (Connection c = TestDatabase.admin();
         Statement st = c.createStatement();
         ResultSet rs =
             st.executeQuery(
@@ -122,7 +123,7 @@ class BaselineMigrationIT {
 
   @Test
   void activityLogRoleCheckAcceptsSystemAndAnonymousOnly() throws SQLException {
-    try (Connection c = CoreDbSupport.as("ums_app");
+    try (Connection c = TestDatabase.as("ums_app");
         Statement st = c.createStatement()) {
       for (String role : List.of("STUDENT", "FACULTY", "ADMIN", "DEV", "SYSTEM", "ANONYMOUS")) {
         st.execute(
@@ -159,7 +160,7 @@ class BaselineMigrationIT {
 
   private static List<String> rows(String sql) throws SQLException {
     List<String> values = new ArrayList<>();
-    try (Connection c = CoreDbSupport.admin();
+    try (Connection c = TestDatabase.admin();
         Statement st = c.createStatement();
         ResultSet rs = st.executeQuery(sql)) {
       while (rs.next()) {

@@ -3,26 +3,22 @@ package edu.ums.core.db;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import edu.ums.platform.config.Environment;
-import edu.ums.platform.db.MigrationRunner;
+import edu.ums.testkit.TestDatabase;
+import edu.ums.testkit.UmsDbExtension;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /** Privileges granted by scripts/db/create_roles.sql plus V1, checked via SET ROLE. */
+@ExtendWith(UmsDbExtension.class)
 class DatabaseRolesIT {
 
   private static final String PERMISSION_DENIED = "42501";
-
-  @BeforeAll
-  static void migrate() {
-    new MigrationRunner(CoreDbSupport.owner(), Environment.TEST).migrate();
-  }
 
   @ParameterizedTest
   @ValueSource(strings = {"ums.it_forbidden", "public.it_forbidden"})
@@ -32,7 +28,7 @@ class DatabaseRolesIT {
 
   @Test
   void appCanReadAndWriteApplicationTables() throws SQLException {
-    try (Connection c = CoreDbSupport.as("ums_app");
+    try (Connection c = TestDatabase.as("ums_app");
         Statement st = c.createStatement()) {
       st.execute(
           "INSERT INTO activity_log (role, action, outcome) VALUES ('SYSTEM', 'IT_APP', 'SUCCESS')");
@@ -48,7 +44,7 @@ class DatabaseRolesIT {
 
   @Test
   void appCanReadButNotChangeMigrationHistory() throws SQLException {
-    try (Connection c = CoreDbSupport.as("ums_app");
+    try (Connection c = TestDatabase.as("ums_app");
         Statement st = c.createStatement();
         ResultSet rs = st.executeQuery("SELECT count(*) FROM flyway_schema_history")) {
       rs.next();
@@ -64,7 +60,7 @@ class DatabaseRolesIT {
         "INSERT INTO activity_log (role, action, outcome) VALUES ('DEV', 'IT', 'SUCCESS')");
     assertDenied("ums_dev_console", "UPDATE feature_flag SET enabled = false");
     assertDenied("ums_dev_console", "CREATE TABLE ums.it_forbidden (id int)");
-    try (Connection c = CoreDbSupport.as("ums_dev_console");
+    try (Connection c = TestDatabase.as("ums_dev_console");
         Statement st = c.createStatement();
         ResultSet rs = st.executeQuery("SELECT count(*) FROM feature_flag")) {
       rs.next();
@@ -74,7 +70,7 @@ class DatabaseRolesIT {
 
   @Test
   void devConsoleHasFifteenSecondStatementTimeout() throws SQLException {
-    try (Connection c = CoreDbSupport.admin();
+    try (Connection c = TestDatabase.admin();
         Statement st = c.createStatement();
         ResultSet rs =
             st.executeQuery(
@@ -87,7 +83,7 @@ class DatabaseRolesIT {
   @Test
   void backupIsReadOnly() throws SQLException {
     assertDenied("ums_backup", "DELETE FROM change_history");
-    try (Connection c = CoreDbSupport.as("ums_backup");
+    try (Connection c = TestDatabase.as("ums_backup");
         Statement st = c.createStatement();
         ResultSet rs = st.executeQuery("SELECT count(*) FROM backup_log")) {
       assertThat(rs.next()).isTrue();
@@ -96,7 +92,7 @@ class DatabaseRolesIT {
 
   @Test
   void applicationRolesAreNotPrivileged() throws SQLException {
-    try (Connection c = CoreDbSupport.admin();
+    try (Connection c = TestDatabase.admin();
         Statement st = c.createStatement();
         ResultSet rs =
             st.executeQuery(
@@ -109,7 +105,7 @@ class DatabaseRolesIT {
   }
 
   private static void assertDenied(String role, String sql) throws SQLException {
-    try (Connection c = CoreDbSupport.as(role);
+    try (Connection c = TestDatabase.as(role);
         Statement st = c.createStatement()) {
       assertThatThrownBy(() -> st.execute(sql))
           .isInstanceOfSatisfying(

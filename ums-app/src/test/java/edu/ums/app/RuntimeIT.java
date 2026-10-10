@@ -12,9 +12,9 @@ import edu.ums.platform.error.DataUnavailableException;
 import edu.ums.platform.observe.HealthReport;
 import edu.ums.platform.observe.HealthStatus;
 import edu.ums.platform.observe.ProbeResult;
+import edu.ums.testkit.TestDatabase;
 import java.sql.Array;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -22,7 +22,6 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -138,7 +137,7 @@ class RuntimeIT {
 
   private static Map<String, String> environment() {
     Map<String, String> env = new HashMap<>(System.getenv());
-    env.put("UMS_DB_URL", required("UMS_TEST_DB_URL"));
+    env.put("UMS_DB_URL", TestDatabase.url());
     env.put("UMS_ENV", "TEST");
     for (String secret :
         List.of(
@@ -187,12 +186,7 @@ class RuntimeIT {
   }
 
   private static Connection admin() throws SQLException {
-    Properties properties = new Properties();
-    properties.setProperty("user", required("UMS_TEST_DB_USER"));
-    String password = System.getenv("UMS_TEST_DB_PASSWORD");
-    properties.setProperty("password", password == null ? "" : password);
-    properties.setProperty("ApplicationName", "ums-runtime-it");
-    return DriverManager.getConnection(required("UMS_TEST_DB_URL"), properties);
+    return TestDatabase.admin();
   }
 
   private static String required(String name) {

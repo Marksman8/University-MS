@@ -10,6 +10,7 @@ import edu.ums.platform.db.MigrationsCurrentProbe;
 import edu.ums.platform.observe.HealthReport;
 import edu.ums.platform.observe.HealthStatus;
 import edu.ums.platform.observe.ProbeResult;
+import edu.ums.testkit.TestDatabase;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,12 +84,7 @@ class RollbackCompatibilityIT {
 
   private static Map<String, String> environment() {
     Map<String, String> env = new HashMap<>(System.getenv());
-    String url = System.getenv("UMS_TEST_DB_URL");
-    if (url == null || url.isBlank()) {
-      throw new IllegalStateException(
-          "UMS_TEST_DB_URL must be set to run integration tests (README: Running integration tests locally)");
-    }
-    env.put("UMS_DB_URL", url);
+    env.put("UMS_DB_URL", TestDatabase.url());
     env.put("UMS_ENV", "TEST");
     return env;
   }

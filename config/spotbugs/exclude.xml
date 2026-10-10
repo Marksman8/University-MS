@@ -46,4 +46,15 @@
     <Class name="edu.ums.platform.db.Tx"/>
     <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
   </Match>
+
+  <!--
+    P0 Step 12. TestDatabase.exec runs fixture DDL/DML written by test code as the test-database
+    admin (testkit is a test-scope dependency only). The TRUNCATE it runs for UmsDbExtension is
+    built server-side from the catalog with format('%I.%I').
+  -->
+  <Match>
+    <Class name="edu.ums.testkit.TestDatabase"/>
+    <Method name="exec"/>
+    <Bug pattern="SQL_INJECTION_JDBC,SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE"/>
+  </Match>
 </FindBugsFilter>

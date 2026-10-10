@@ -2,29 +2,25 @@ package edu.ums.core.db;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import edu.ums.platform.config.Environment;
-import edu.ums.platform.db.MigrationRunner;
+import edu.ums.testkit.TestDatabase;
+import edu.ums.testkit.UmsDbExtension;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.postgresql.PGConnection;
 import org.postgresql.PGNotification;
 
 /** trg_activity_notify sends NOTIFY ums_activity with the new row id on every insert. */
+@ExtendWith(UmsDbExtension.class)
 class ActivityNotifyIT {
-
-  @BeforeAll
-  static void migrate() {
-    new MigrationRunner(CoreDbSupport.owner(), Environment.TEST).migrate();
-  }
 
   @Test
   void insertIntoActivityLogNotifiesListenersWithTheRowId() throws SQLException {
-    try (Connection listener = CoreDbSupport.as("ums_app");
-        Connection writer = CoreDbSupport.as("ums_app")) {
+    try (Connection listener = TestDatabase.as("ums_app");
+        Connection writer = TestDatabase.as("ums_app")) {
       try (Statement st = listener.createStatement()) {
         st.execute("LISTEN ums_activity");
       }

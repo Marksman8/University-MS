@@ -7,6 +7,7 @@ import edu.ums.api.error.ErrorCode;
 import edu.ums.platform.error.ConstraintErrorMap;
 import edu.ums.platform.error.RuleViolationException;
 import edu.ums.platform.error.SqlErrorMapper;
+import edu.ums.testkit.TestDatabase;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -40,21 +41,21 @@ class DriverErrorDetailIT {
 
   @BeforeAll
   void start() throws SQLException {
-    DbTestSupport.exec("CREATE SCHEMA IF NOT EXISTS ums", ProbeRepository.CREATE_TABLE);
-    pools = DataSources.create(DbTestSupport.config(Duration.ofSeconds(10)), errors);
+    TestDatabase.exec("CREATE SCHEMA IF NOT EXISTS ums", ProbeRepository.CREATE_TABLE);
+    pools = DataSources.create(TestDatabase.config(Duration.ofSeconds(10)), errors);
     tx = new TransactionRunner(pools.app(), errors, new RetryPolicy(new Random(), Sleeper.SYSTEM));
     probes = new ProbeRepository(tx, errors);
   }
 
   @BeforeEach
   void clean() throws SQLException {
-    DbTestSupport.exec("TRUNCATE ums.it_probe RESTART IDENTITY");
+    TestDatabase.exec("TRUNCATE ums.it_probe RESTART IDENTITY");
   }
 
   @AfterAll
   void stop() throws SQLException {
     pools.close();
-    DbTestSupport.exec("DROP TABLE IF EXISTS ums.it_probe");
+    TestDatabase.exec("DROP TABLE IF EXISTS ums.it_probe");
   }
 
   @Test
@@ -72,12 +73,12 @@ class DriverErrorDetailIT {
 
   @Test
   void listenerConnectionHidesRowValuesButConstraintIsStillMapped() throws SQLException {
-    DbTestSupport.exec(
+    TestDatabase.exec(
         "INSERT INTO ums.it_probe (code, bucket, created_at) VALUES ('"
             + SECRET_VALUE
             + "', 1, now())");
     ListenerConnectionFactory factory =
-        new ListenerConnectionFactory(DbTestSupport.config(Duration.ofSeconds(10)), errors);
+        new ListenerConnectionFactory(TestDatabase.config(Duration.ofSeconds(10)), errors);
     try (Connection connection = factory.open();
         Statement st = connection.createStatement()) {
       SQLException raw =
@@ -95,11 +96,11 @@ class DriverErrorDetailIT {
 
   @Test
   void controlDefaultDriverSettingDoesExposeRowValues() throws SQLException {
-    DbTestSupport.exec(
+    TestDatabase.exec(
         "INSERT INTO ums.it_probe (code, bucket, created_at) VALUES ('"
             + SECRET_VALUE
             + "', 1, now())");
-    try (Connection connection = DbTestSupport.admin(false);
+    try (Connection connection = TestDatabase.admin(false);
         Statement st = connection.createStatement()) {
       SQLException raw =
           org.junit.jupiter.api.Assertions.assertThrows(

@@ -9,6 +9,7 @@ import edu.ums.platform.error.InfrastructureException;
 import edu.ums.platform.error.NotFoundException;
 import edu.ums.platform.error.SqlErrorMapper;
 import edu.ums.platform.error.StaleDataException;
+import edu.ums.testkit.TestDatabase;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -32,22 +33,22 @@ class RepositoryTemplatesIT {
 
   @BeforeAll
   void start() throws SQLException {
-    DbTestSupport.exec("CREATE SCHEMA IF NOT EXISTS ums", ProbeRepository.CREATE_TABLE);
+    TestDatabase.exec("CREATE SCHEMA IF NOT EXISTS ums", ProbeRepository.CREATE_TABLE);
     SqlErrorMapper errors = new SqlErrorMapper(ConstraintErrorMap.standard());
-    pools = DataSources.create(DbTestSupport.config(Duration.ofSeconds(10)), errors);
+    pools = DataSources.create(TestDatabase.config(Duration.ofSeconds(10)), errors);
     tx = new TransactionRunner(pools.app(), errors, new RetryPolicy(new Random(), Sleeper.SYSTEM));
     probes = new ProbeRepository(tx, errors);
   }
 
   @BeforeEach
   void clean() throws SQLException {
-    DbTestSupport.exec("TRUNCATE ums.it_probe RESTART IDENTITY");
+    TestDatabase.exec("TRUNCATE ums.it_probe RESTART IDENTITY");
   }
 
   @AfterAll
   void stop() throws SQLException {
     pools.close();
-    DbTestSupport.exec("DROP TABLE IF EXISTS ums.it_probe");
+    TestDatabase.exec("DROP TABLE IF EXISTS ums.it_probe");
   }
 
   @Test
