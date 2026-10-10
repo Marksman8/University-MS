@@ -2,35 +2,103 @@
 
 Java 21 · Maven 3.9+ · PostgreSQL 18 · modular monolith.
 
-> Skeleton. Full setup, run and test instructions arrive in P0 Step 14.
+The backend of a university management system for one institution. A JavaFX frontend (built
+separately) runs in the same JVM and calls the backend only through the role facades in `ums-api`.
+Standing rules for contributors and coding agents: [`CLAUDE.md`](CLAUDE.md). Build spec:
+[`docs/prompts/`](docs/prompts). Decisions: [`docs/adr/`](docs/adr). Operations:
+[`docs/runbook.md`](docs/runbook.md).
 
-## Modules
+## Module map
 
-| Module | Purpose |
+| Module | Purpose | Depends on |
+| --- | --- | --- |
+| `ums-api` | Facade interfaces, DTOs, `ErrorCode`, `UmsApiException`, paging types, annotations — the only module the frontend sees | nothing |
+| `ums-platform` | Config, DB (pools, transactions, `BaseRepository`, migrations), interceptor chain, errors and SQL mapping, tracing/metrics/health, state machine, managed executors | `ums-api` |
+| `ums-testkit` | Shared test infrastructure: `TestDatabase`, `UmsDbExtension`, `ConcurrencyHarness`, `FailureInjector`, `ArchitectureRules`, `TestData` (test scope only) | `ums-api`, `ums-platform` |
+| `ums-core` | Feature packages, facade implementations, Flyway migrations (`db/migration`) | `ums-api`, `ums-platform` |
+| `ums-app` | `AppContext` wiring, `UmsRuntime` lifecycle, `Main`; acceptance/E2E tests | all |
+
+## Prerequisites
+
+- JDK 21
+- Maven 3.9+
+- PostgreSQL 18 (server for running; binaries for the local test cluster)
+- [gitleaks](https://github.com/gitleaks/gitleaks) on `PATH` (optional locally — the pre-commit
+  hook warns if missing; CI always scans)
+
+## Database setup
+
+1. Create the databases as a PostgreSQL superuser: `CREATE DATABASE ums;` (and `ums_test` for
+   integration tests).
+2. Create the roles and schema in each database (idempotent; re-running resets passwords):
+
+   ```
+   psql -h localhost -U postgres -d ums -v ON_ERROR_STOP=1 \
+        -v owner_pw=... -v app_pw=... -v console_pw=... -v listener_pw=... -v backup_pw=... \
+        -f scripts/db/create_roles.sql
+   ```
+
+   Roles: `ums_owner` (owns schema, runs migrations), `ums_app`, `ums_dev_console` (read-only,
+   15 s statement timeout), `ums_listener` (LISTEN + SELECT on `activity_log`), `ums_backup`
+   ([ADR 011](docs/adr/011-database-role-model.md)).
+3. Migrations run automatically at startup as `ums_owner`.
+
+## Environment variables
+
+Secrets come from the environment only; non-secret settings come from
+`ums-app/src/main/resources/application.properties`, then `application-<env>.properties`, then an
+environment variable named `UMS_` + the property after `ums.` (upper case, `.`/`-` → `_`). All
+problems are reported together at startup. See [`.env.example`](.env.example).
+
+| Variable | Meaning |
 | --- | --- |
-| `ums-api` | Facade interfaces, DTOs, error codes — the only module the frontend sees |
-| `ums-platform` | Config, DB, interceptors, security primitives, errors, audit/observe infrastructure |
-| `ums-testkit` | Shared test infrastructure (test scope only) |
-| `ums-core` | Feature packages, facade implementations, Flyway migrations |
-| `ums-app` | Wiring (`AppContext`), `Main`, startup/shutdown |
+| `UMS_ENV` | `LOCAL` (default), `TEST`, `STAGING`, `PROD` |
+| `UMS_DB_URL` | JDBC URL, default `jdbc:postgresql://localhost:5432/ums` |
+| `UMS_DB_USER` | application login, default `ums_app` |
+| `UMS_DB_PASSWORD` | password of `ums_app` |
+| `UMS_CONSOLE_DB_PASSWORD` | password of `ums_dev_console` |
+| `UMS_LISTENER_DB_PASSWORD` | password of `ums_listener` |
+| `UMS_OWNER_DB_PASSWORD` | password of `ums_owner` (migrations) |
+| `UMS_BACKUP_DB_PASSWORD` | password of `ums_backup` |
+| `UMS_LOG_DIR` | log directory, default `logs` (daily rolling, 14 days, UTC) |
+| `UMS_TEST_DB_URL`, `UMS_TEST_DB_USER`, `UMS_TEST_DB_PASSWORD` | integration tests only (admin login of the test database) |
+
+## Git hooks
+
+```
+sh scripts/install-hooks.sh     # sets core.hooksPath = scripts/hooks
+```
+
+The pre-commit hook runs `mvn -q -Pfast verify` and, if installed, `gitleaks protect --staged`.
 
 ## Build
 
 ```
-mvn -Pfast verify   # quick: format, compile, unit tests
-mvn verify          # full gate (needs the integration-test database, see below)
+mvn -Pfast verify   # format check, compile, unit + property + ArchUnit tests
+mvn verify          # full gate: + integration tests, JaCoCo, Checkstyle, SpotBugs, licences
+mvn spotless:apply  # format the code
 ```
 
-Skipping tests: Failsafe 3.6 no longer honours `-DskipTests`; use `-DskipTests -DskipITs` to skip
-both unit and integration tests (e.g. `mvn install -DskipTests -DskipITs`).
+Profiles: `fast`, default, `nightly` (concurrency tests × 50), `release` (+ PIT ≥ 70 %, OWASP
+Dependency-Check, reads `NVD_API_KEY`). Skipping tests: Failsafe 3.6 no longer honours
+`-DskipTests`; use `-DskipTests -DskipITs` (e.g. `mvn install -DskipTests -DskipITs`).
 
-See `CLAUDE.md` for standing rules and `docs/prompts/` for the build spec.
+## Run
+
+```
+mvn install -DskipTests -DskipITs
+mvn -pl ums-app exec:java                       # start headless; Ctrl+C stops cleanly
+mvn -pl ums-app exec:java -Dexec.args=--check   # smoke run: start → log health → stop → exit
+```
+
+Startup: load config → open pools → migrate → start executors → READY. Health (database,
+migrations) is logged after start. Details in the [runbook](docs/runbook.md).
 
 ## Running integration tests locally
 
 Integration tests (`*IT`) need a PostgreSQL 18 database prepared by `scripts/db/create_roles.sql`.
-They never skip: if the variables below are missing they fail with a message saying which one.
-The easiest way is a throwaway cluster that does not touch any installed PostgreSQL service:
+They never skip: if a variable is missing they fail with a message naming it. The easiest way is a
+throwaway cluster that does not touch any installed PostgreSQL service:
 
 ```
 # Windows (PowerShell)
@@ -58,16 +126,26 @@ Then run `mvn verify`.
 
 ## CI setup
 
-The pull-request workflow (P0 Step 13) runs a `postgres:18` service container:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+
+- **push** (all branches): `mvn -B -Pfast verify` and Gitleaks.
+- **pull_request**: `postgres:18` service; `ums_test` is created and `scripts/db/create_roles.sql`
+  applied with psql inside the container; `mvn -B verify`; reports uploaded; Dependency-Check if
+  `NVD_API_KEY` is set.
+- **nightly** (21:30 UTC): `mvn -B verify -Pnightly`, Dependency-Check, PIT report (non-blocking
+  until P7).
+
+Database login and secrets:
 
 - `UMS_TEST_DB_USER` / `UMS_TEST_DB_PASSWORD` are the container's superuser (`POSTGRES_USER` /
-  `POSTGRES_PASSWORD`). Integration tests need it to run `SET ROLE` and Flyway `clean` in `ums_test`.
+  `POSTGRES_PASSWORD`); integration tests need it for `SET ROLE` and Flyway `clean` in `ums_test`.
 - Every role password comes from a GitHub Actions secret and is passed both to
-  `scripts/db/create_roles.sql` (as `-v owner_pw=… -v app_pw=… -v console_pw=… -v listener_pw=… -v backup_pw=…`)
-  and to the tests as `UMS_OWNER_DB_PASSWORD`, `UMS_DB_PASSWORD`, `UMS_CONSOLE_DB_PASSWORD`,
-  `UMS_LISTENER_DB_PASSWORD`, `UMS_BACKUP_DB_PASSWORD`.
+  `create_roles.sql` (`-v owner_pw=… -v app_pw=… -v console_pw=… -v listener_pw=… -v backup_pw=…`)
+  and to the tests (`UMS_OWNER_DB_PASSWORD`, `UMS_DB_PASSWORD`, `UMS_CONSOLE_DB_PASSWORD`,
+  `UMS_LISTENER_DB_PASSWORD`, `UMS_BACKUP_DB_PASSWORD`).
 - Required repository secrets: `UMS_CI_POSTGRES_PASSWORD`, `UMS_CI_OWNER_DB_PASSWORD`,
   `UMS_CI_APP_DB_PASSWORD`, `UMS_CI_CONSOLE_DB_PASSWORD`, `UMS_CI_LISTENER_DB_PASSWORD`,
-  `UMS_CI_BACKUP_DB_PASSWORD`; optional `NVD_API_KEY` for Dependency-Check.
-- GitHub masks secret values in logs automatically; any value the workflow derives or generates is
-  masked with `::add-mask::` before use. Secrets are never echoed.
+  `UMS_CI_BACKUP_DB_PASSWORD`; optional `NVD_API_KEY` (Dependency-Check) and, for organisation
+  repositories, `GITLEAKS_LICENSE`.
+- GitHub masks secret values in logs; the workflow never echoes them and derives no new secret
+  values (any future derived value must be masked with `::add-mask::` first).

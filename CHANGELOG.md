@@ -23,3 +23,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Runtime: `UmsRuntime` (config → pools → migrate → executors → ready; staged stop; idempotent), `AppContext` composition root, `Main` (`exec:java`, `--check` smoke run), `HealthService` with `DatabaseReachableProbe` and `MigrationsCurrentProbe` (2 s per probe, UP/DEGRADED/DOWN), `Readiness` gate (`DB_UNAVAILABLE` until ready).
 - Rollback compatibility: Flyway ignores applied migrations newer than the build (`*:future`); the migrations probe reports "schema ahead of application (rollback mode)".
 - `ums-testkit`: `TestDatabase`, `UmsDbExtension` (clean + migrate once per JVM, truncate between tests, seed tables kept), `ConcurrencyHarness`, `FailureInjector`, `ArchitectureRules` (8 rules, each with a negative fixture test) applied by an `ArchitectureTest` in testkit, core and app, `TestData`/`SeedGenerator`.
+- Local throwaway PostgreSQL 18 test cluster: `scripts/dev/test-cluster.ps1` and `test-cluster.sh` (`init`/`start`/`stop`/`status`/`roles`/`env`).
+- CI: `.github/workflows/ci.yml` — push (fast gate + Gitleaks), pull request (full gate on a `postgres:18` service, reports uploaded, Dependency-Check with `NVD_API_KEY`), nightly (`-Pnightly`, Dependency-Check, PIT report).
+- Documentation: README (prerequisites, setup, environment, hooks, build, run, test cluster, CI setup, module map), ADRs 001–012, runbook (start/stop, health, rollback; backup/restore/incidents in P6).
+
+### Changed
+- Target database is PostgreSQL 18 everywhere (ADR 010); specs synced with the P0 rulings (constraint naming, retry = 3 attempts in total, `ums_listener`).
