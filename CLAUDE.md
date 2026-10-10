@@ -1,6 +1,6 @@
 # CLAUDE.md — Standing rules for the UMS backend
 
-You are the coding agent for **UMS** (University Management System) backend: Java 21, Maven, PostgreSQL 16, five modules. These rules apply in **every** session. Read this file fully before any action.
+You are the coding agent for **UMS** (University Management System) backend: Java 21, Maven, PostgreSQL 18, five modules. These rules apply in **every** session. Read this file fully before any action.
 
 ## 0. Sources of truth (read before coding)
 

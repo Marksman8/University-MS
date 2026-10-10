@@ -75,7 +75,7 @@ Package `edu.ums.api`:
 
 - `db/DataSources` — HikariCP `app` (max 10, connectionTimeout 5 000 ms) and `console` (max 3); `ListenerConnectionFactory` for one dedicated connection. `connectionInitSql`: `SET search_path = ums; SET statement_timeout = '10s'; SET lock_timeout = '5s'` (console: `15s`). Pool names exposed for metrics.
 - `db/Tx` (connection + readOnly flag); `db/TransactionRunner` with a `ThreadLocal<Tx>`: `inTransaction(boolean readOnly, Supplier<T>)` — joins an existing tx (REQUIRED), else opens one at READ COMMITTED, commits, rolls back on any throwable, always restores the ThreadLocal.
-- `db/RetryPolicy` — max 3 attempts, backoff uniform 20–100 ms from an injected `RandomGenerator`; retries only `ConflictException`-class failures (40001, 40P01) and only at the outermost transaction.
+- `db/RetryPolicy` — 3 attempts in total (2 retries), backoff uniform 20–100 ms from an injected `RandomGenerator`; retries only `ConflictException`-class failures (40001, 40P01) and only at the outermost transaction.
 - `db/BaseRepository` (abstract, template methods): `queryOne`, `queryOptional`, `queryList` (bounded by a required `limit`), `queryPage(KeysetQuery, PageRequest, RowMapper)`, `update`, `updateExactlyOne` (0 rows → `StaleDataException`), `batch`, `casState(table, id, fromState, toState, version)`. All `PreparedStatement`, all try-with-resources, all SQLExceptions through `SqlErrorMapper`.
 - `db/CursorCodec` — encodes `(sortKey..., id)` as Base64 JSON; decode validates shape; tampered cursor → `VALIDATION_FAILED`.
 - Tests (`*IT` against PostgreSQL): commit/rollback, nested joins outer tx, read-only tx rejects writes, retry on injected 40001 (fake connection wrapper in a unit test), statement timeout → TIMEOUT (use a 1 s timeout in the test config), keyset paging over 1 000 rows returns disjoint, ordered pages including equal sort keys; jqwik round-trip for `CursorCodec`.
@@ -83,25 +83,27 @@ Package `edu.ums.api`:
 ## Step 7 — Migrations baseline and DB roles · `feat(db): flyway baseline and database roles`
 
 - `db/MigrationRunner` — Flyway as `ums_owner`, location `classpath:db/migration`, schema `ums`, `validateOnMigrate=true`, `cleanDisabled=true` unless `Environment.TEST`.
-- `scripts/db/create_roles.sql` — idempotent (`DO $$ … IF NOT EXISTS … $$`): roles `ums_owner`, `ums_app`, `ums_dev_console`, `ums_backup`; database grants; `ALTER DEFAULT PRIVILEGES FOR ROLE ums_owner IN SCHEMA ums` granting DML on tables + USAGE on sequences to `ums_app`, SELECT to `ums_dev_console` and `ums_backup`; `ALTER ROLE ums_dev_console SET statement_timeout = '15s'`. Passwords read from psql variables, never hard-coded.
+- `scripts/db/create_roles.sql` — idempotent (`DO $$ … IF NOT EXISTS … $$`): roles `ums_owner`, `ums_app`, `ums_dev_console`, `ums_listener` (no default privileges; grants in `V2__p0_listener_grants.sql`), `ums_backup`; database grants; `ALTER DEFAULT PRIVILEGES FOR ROLE ums_owner IN SCHEMA ums` granting DML on tables + USAGE on sequences to `ums_app`, SELECT to `ums_dev_console` and `ums_backup`; `ALTER ROLE ums_dev_console SET statement_timeout = '15s'`. Passwords read from psql variables, never hard-coded.
 - `ums-core/src/main/resources/db/migration/V1__p0_baseline.sql`:
   - `CREATE SCHEMA IF NOT EXISTS ums`; `CREATE EXTENSION IF NOT EXISTS btree_gist`.
   - `app_error_log` (design columns + index on `occurred_at DESC`).
   - `feature_flag (key text PK, enabled boolean not null, updated_by bigint, updated_at timestamptz)` seeded with the five flags, all enabled.
   - `backup_log (id, started_at, finished_at, file_path, size_bytes, verified boolean, outcome, message)`.
-  - `activity_log` + three indexes + `notify_activity()` trigger, exactly as below (`user_id` FK to `app_user` added in P1):
+  - `activity_log` + three indexes + `notify_activity()` trigger, exactly as below (constraints named per the naming rule; matches V1) (`user_id` FK to `app_user` added in P1):
     ```sql
     CREATE TABLE activity_log (
-      id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      id          BIGINT GENERATED ALWAYS AS IDENTITY CONSTRAINT pk_activity_log PRIMARY KEY,
       occurred_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
       user_id     BIGINT,                        -- FK to app_user added in P1
       username    VARCHAR(64),
-      role        VARCHAR(16) NOT NULL CHECK (role IN ('STUDENT','FACULTY','ADMIN','DEV','SYSTEM','ANONYMOUS')),
+      role        VARCHAR(16) NOT NULL CONSTRAINT ck_activity_log_role
+                  CHECK (role IN ('STUDENT','FACULTY','ADMIN','DEV','SYSTEM','ANONYMOUS')),
       session_id  UUID,
       action      VARCHAR(64) NOT NULL,
       entity_type VARCHAR(64),
       entity_id   VARCHAR(64),
-      outcome     VARCHAR(8)  NOT NULL CHECK (outcome IN ('SUCCESS','FAILURE')),
+      outcome     VARCHAR(8)  NOT NULL CONSTRAINT ck_activity_log_outcome
+                  CHECK (outcome IN ('SUCCESS','FAILURE')),
       details     JSONB,
       trace_id    UUID
     );
@@ -127,10 +129,10 @@ Include the migration file, the roles script, and IT results. Await review.
 - `invoke/InterceptorSlot` enum in fixed order: `ERROR_MAPPING, SESSION, AUTHORISATION, FEATURE_FLAG, RATE_LIMIT, TRACING, AUDIT, TRANSACTION`.
 - `invoke/Invocation` — target, `Method`, args (defensive copy), attribute map, `proceed()` advancing an index over an immutable interceptor list.
 - `invoke/FacadeProxyFactory.create(Class<T> api, T impl, List<Interceptor>)` — sorts by slot once, rejects duplicate slots, returns a JDK proxy; `equals/hashCode/toString` bypass the chain; unwraps `InvocationTargetException`.
-- Implement now: `ErrorMappingInterceptor` (uses `ApiErrorTranslator`), `TracingInterceptor` (minimal `Tracer`, `TraceContext` in ThreadLocal, MDC `traceId`, per-method `LongAdder` count/total/errors in `MetricsRegistry`), `TransactionInterceptor` (`@Writes` → read-write else read-only; outermost retry via `RetryPolicy`).
+- Implement now: `ErrorMappingInterceptor` (uses `ApiErrorTranslator`), `TracingInterceptor` (minimal `Tracer`, `TraceContext` in ThreadLocal, MDC `traceId`, per-method `LongAdder` count/total/errors in `MetricsRegistry`), `TransactionInterceptor` (`@Writes` → read-write else read-only; delegates to `TransactionRunner`, which already owns the outermost retry — no second retry layer).
 - SESSION, AUTHORISATION, AUDIT, RATE_LIMIT arrive in P1/P3; FEATURE_FLAG in P6. The factory works with any subset.
 - Complexity: O(k) per call, k ≤ 8; O(1) extra space.
-- Tests: slot order regardless of list order; duplicate slot rejected; exception from target mapped to `UmsApiException`; tx commits on success and rolls back on exception; retry happens exactly up to 3 times; Object methods bypass; jqwik over random interceptor subsets.
+- Tests: slot order regardless of list order; duplicate slot rejected; exception from target mapped to `UmsApiException`; tx commits on success and rolls back on exception; retry stops after 3 attempts in total (2 retries); Object methods bypass; jqwik over random interceptor subsets.
 
 ## Step 9 — Generic state machine · `feat(platform): generic state machine with guards and actions`
 

@@ -104,7 +104,7 @@ Facade operations are listed in DESIGN.md §Application API; each phase prompt g
 
 ## 6. Data model
 
-Schema `ums`, 31 tables (full list in DESIGN.md §Data model). Every table: `id bigint generated always as identity` (except UUID session ids and composite-key link tables), `created_at timestamptz default now()`; mutable aggregates have `version bigint not null default 0`. All timestamps `timestamptz`; money/percent `numeric`.
+Schema `ums`, 31 tables (full list in DESIGN.md §Data model). Every table: `id bigint generated always as identity` (except UUID session ids and composite-key link tables), `created_at timestamptz default now()`; mutable aggregates have `version bigint not null default 0`. All timestamps `timestamptz`; money/percent `numeric`. Every constraint and index is named explicitly in migrations with `pk_`/`fk_`/`uq_`/`ck_`/`ex_`/`idx_` prefixes; `SqlErrorMapper` depends on these names.
 
 Hard rules as constraints (must exist exactly):
 
@@ -121,7 +121,7 @@ CREATE UNIQUE INDEX uq_result_current ON result (enrolment_id) WHERE is_current;
 ALTER TABLE mark ADD CONSTRAINT ck_mark_nonneg CHECK (value IS NULL OR value >= 0);
 ```
 
-Migrations: Flyway, versioned `V<n>__<phase>_<topic>.sql`, expand-then-contract (a release only adds; removals ship one release later). Flyway runs as `ums_owner`; the app runs as `ums_app`. DB roles: `ums_owner`, `ums_app`, `ums_dev_console` (read-only default, no `password_hash`, `statement_timeout 15s`), `ums_backup`.
+Migrations: Flyway, versioned `V<n>__<phase>_<topic>.sql`, expand-then-contract (a release only adds; removals ship one release later). Flyway runs as `ums_owner`; the app runs as `ums_app`. DB roles: `ums_owner`, `ums_app`, `ums_dev_console` (read-only default, no `password_hash`, `statement_timeout 15s`), `ums_listener` (LISTEN + SELECT on `activity_log` only), `ums_backup`.
 
 ## 7. State machines
 
@@ -149,7 +149,7 @@ Generic `StateMachine<S extends Enum<S>, C>` in `ums-platform` (`EnumMap<S, Enum
 
 - READ COMMITTED; one transaction per facade call; statement timeout 10 s; lock wait 5 s.
 - Global lock order: **term → student → section → mark sheet → result**.
-- Retry 40001/40P01 up to 3× with 20–100 ms random backoff → `CONFLICT_TRY_AGAIN`.
+- Retry 40001/40P01 with 20–100 ms random backoff, 3 attempts in total (2 retries) → `CONFLICT_TRY_AGAIN`.
 - Threads: callers (any) · `audit-writer` 1 · `activity-listener` 1 · `scheduler` 2 · `listener-dispatch` 2 · `dev-console` 2. Pools: app 10 (5 s wait), console 3, listener 1 dedicated.
 - Shutdown: stop accepting calls → drain audit (≤5 s) → scheduler → listener → pools.
 - Shared state: sessions `ConcurrentHashMap` + `AtomicLong`; rate limits per-session `TokenBucket` (`synchronized` per bucket); flags volatile immutable snapshot (10 s refresh); metrics `LongAdder`; subscribers `CopyOnWriteArrayList`.
@@ -161,11 +161,11 @@ Hierarchy (unchecked): `UmsException` → `DomainException` (`ValidationExceptio
 `ErrorCode` enum (each with key `error.<area>.<lower_snake>`):
 `BAD_CREDENTIALS ACCOUNT_LOCKED SESSION_EXPIRED ACCESS_DENIED PASSWORD_POLICY LAST_ADMIN USERNAME_TAKEN FEATURE_DISABLED RATE_LIMITED CONFIRMATION_REQUIRED VALIDATION_FAILED NOT_FOUND STALE_DATA INVALID_TRANSITION GUARD_FAILED SLOT_CLASH INVALID_SCHEME WINDOW_CLOSED ALREADY_ENROLLED PREREQ_NOT_MET CREDIT_LIMIT TIMETABLE_CLASH SECTION_FULL EDIT_WINDOW_CLOSED INVALID_SESSION_DATE MARK_OUT_OF_RANGE NOT_EDITABLE MARKS_INCOMPLETE DB_UNAVAILABLE BUSY_TRY_AGAIN CONFLICT_TRY_AGAIN TIMEOUT CANCELLED INTERNAL_ERROR`
 
-SQL mapping (`SqlErrorMapper`; constraint name → code via `HashMap`): 08xxx→DB_UNAVAILABLE · Hikari timeout→BUSY_TRY_AGAIN · 40001/40P01→retry→CONFLICT_TRY_AGAIN · 23505 `uq_enrolment_live`→ALREADY_ENROLLED · 23505 username→USERNAME_TAKEN · 23P01 `ex_room_slot`/`ex_faculty_slot`→SLOT_CLASH · 23514 `ck_section_capacity`→SECTION_FULL · 23503→NOT_FOUND · 55P03→BUSY_TRY_AGAIN · 57014→TIMEOUT/CANCELLED · else INTERNAL_ERROR.
+SQL mapping (`SqlErrorMapper`; constraint name → code via `HashMap`): 08xxx→DB_UNAVAILABLE · Hikari timeout→BUSY_TRY_AGAIN · 40001/40P01→retry→CONFLICT_TRY_AGAIN · 23505 `uq_enrolment_live`→ALREADY_ENROLLED · 23505 `uq_app_user_username`→USERNAME_TAKEN · 23505 `uq_one_active_term`→GUARD_FAILED · 23505 `uq_result_current`→STALE_DATA · 23514 `ck_mark_nonneg`→MARK_OUT_OF_RANGE · 23P01 `ex_room_slot`/`ex_faculty_slot`→SLOT_CLASH · 23514 `ck_section_capacity`→SECTION_FULL · 23503→NOT_FOUND · 55P03→BUSY_TRY_AGAIN · 57014→TIMEOUT/CANCELLED · else INTERNAL_ERROR.
 
 ## 11. Security
 
-BCrypt 12, `char[]` zeroed; uniform BAD_CREDENTIALS; lockout via one conditional update; 128-bit random session ids; role check in interceptor + ownership checks in services (`OwnershipGuard`); last-admin rule under lock; `PreparedStatement` only, sort/filter columns from enum allow-lists; secrets from env vars only (`UMS_DB_URL UMS_DB_USER UMS_DB_PASSWORD UMS_CONSOLE_DB_PASSWORD UMS_LISTENER_DB_PASSWORD UMS_OWNER_DB_PASSWORD UMS_BACKUP_DB_PASSWORD UMS_ENV`); CSV cells starting `= + - @` prefixed with `'`; audit of every write, login, failure, denial, override.
+BCrypt 12, `char[]` zeroed; uniform BAD_CREDENTIALS; lockout via one conditional update; 128-bit random session ids; role check in interceptor + ownership checks in services (`OwnershipGuard`); last-admin rule under lock; `PreparedStatement` only, sort/filter columns from enum allow-lists; least-privilege DB roles `ums_owner ums_app ums_dev_console ums_listener ums_backup`; secrets from env vars only (`UMS_DB_URL UMS_DB_USER UMS_DB_PASSWORD UMS_CONSOLE_DB_PASSWORD UMS_LISTENER_DB_PASSWORD UMS_OWNER_DB_PASSWORD UMS_BACKUP_DB_PASSWORD UMS_ENV`); CSV cells starting `= + - @` prefixed with `'`; audit of every write, login, failure, denial, override.
 
 ## 12. Operations
 
