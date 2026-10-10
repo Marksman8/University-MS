@@ -1,0 +1,19 @@
+# Build output
+target/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+
+# Local secrets and runtime output
+.env
+logs/
+backups/
+
+# Local-only folders (not part of the UMS backend)
+.tools/
+_archive/
+.github/modernize/
+# Legacy MySQL console module: not reused (master prompt §16) and contains a hard-coded DB password
+University-MS-Arya/
