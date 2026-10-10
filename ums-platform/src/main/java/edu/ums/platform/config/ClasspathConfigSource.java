@@ -35,10 +35,7 @@ public final class ClasspathConfigSource implements ConfigSource {
         return Optional.of(Map.copyOf(values));
       }
     } catch (IOException e) {
-      ConfigException failure =
-          new ConfigException(List.of(resourceName + ": cannot be read (" + e.getMessage() + ")"));
-      failure.initCause(e);
-      throw failure;
+      throw new ConfigException(List.of(resourceName + ": cannot be read"), e);
     }
   }
 }
