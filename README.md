@@ -18,8 +18,11 @@ Java 21 · Maven 3.9+ · PostgreSQL 18 · modular monolith.
 
 ```
 mvn -Pfast verify   # quick: format, compile, unit tests
-mvn verify          # full gate
+mvn verify          # full gate (needs the integration-test database, see below)
 ```
+
+Skipping tests: Failsafe 3.6 no longer honours `-DskipTests`; use `-DskipTests -DskipITs` to skip
+both unit and integration tests (e.g. `mvn install -DskipTests -DskipITs`).
 
 See `CLAUDE.md` for standing rules and `docs/prompts/` for the build spec.
 
