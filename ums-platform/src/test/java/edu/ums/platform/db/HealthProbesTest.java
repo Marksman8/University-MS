@@ -45,23 +45,30 @@ class HealthProbesTest {
   }
 
   @Test
-  void migrationsProbeReflectsPendingMigrations() {
+  void migrationsProbeReflectsPendingAndFutureMigrations() {
     MigrationRunner runner = mock(MigrationRunner.class);
-    when(runner.pendingCount()).thenReturn(0, 2);
+    when(runner.status())
+        .thenReturn(
+            new MigrationStatus(0, 0), new MigrationStatus(2, 0), new MigrationStatus(0, 1));
 
     MigrationsCurrentProbe probe = new MigrationsCurrentProbe(runner);
 
-    assertThat(probe.check().status()).isEqualTo(HealthStatus.UP);
+    ProbeResult current = probe.check();
+    assertThat(current.status()).isEqualTo(HealthStatus.UP);
+    assertThat(current.detail()).isEqualTo("schema current");
     ProbeResult behind = probe.check();
     assertThat(behind.status()).isEqualTo(HealthStatus.DEGRADED);
     assertThat(behind.detail()).isEqualTo("2 migration(s) pending");
+    ProbeResult ahead = probe.check();
+    assertThat(ahead.status()).isEqualTo(HealthStatus.UP);
+    assertThat(ahead.detail()).isEqualTo("schema ahead of application (rollback mode)");
     assertThat(probe.name()).isEqualTo("migrations");
   }
 
   @Test
   void migrationsProbeIsDownWhenStateCannotBeRead() {
     MigrationRunner runner = mock(MigrationRunner.class);
-    when(runner.pendingCount())
+    when(runner.status())
         .thenThrow(
             new InfrastructureException(ErrorCode.INTERNAL_ERROR, new IllegalStateException()));
 

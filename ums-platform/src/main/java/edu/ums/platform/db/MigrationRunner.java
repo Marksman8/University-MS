@@ -10,6 +10,8 @@ import java.util.Objects;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.FlywayException;
+import org.flywaydb.core.api.MigrationInfo;
+import org.flywaydb.core.api.MigrationInfoService;
 import org.postgresql.ds.PGSimpleDataSource;
 
 /**
@@ -17,11 +19,17 @@ import org.postgresql.ds.PGSimpleDataSource;
  * owner ({@code ums_owner}), never as an application role. Validates on migrate; {@code clean} is
  * allowed only in {@link Environment#TEST}. The schema itself is created by {@code
  * scripts/db/create_roles.sql}.
+ *
+ * <p>Rollback compatibility: applied migrations newer than this build ({@value #IGNORE_FUTURE}) are
+ * ignored, not fatal, so version N-1 of the application starts on version N's schema.
  */
 public final class MigrationRunner {
 
   /** Flyway location of the versioned migrations. */
   public static final String LOCATION = "classpath:db/migration";
+
+  /** Flyway ignore pattern: applied migrations unknown to this build never fail validation. */
+  public static final String IGNORE_FUTURE = "*:future";
 
   private final Flyway flyway;
   private final Environment environment;
@@ -37,6 +45,7 @@ public final class MigrationRunner {
             .defaultSchema(SessionSettings.SCHEMA)
             .createSchemas(false)
             .validateOnMigrate(true)
+            .ignoreMigrationPatterns(IGNORE_FUTURE)
             .cleanDisabled(environment != Environment.TEST)
             .load();
   }
@@ -71,8 +80,24 @@ public final class MigrationRunner {
 
   /** Returns the number of migrations not yet applied. */
   public int pendingCount() {
+    return status().pending();
+  }
+
+  /**
+   * Compares the database with this build's migrations.
+   *
+   * @throws InfrastructureException {@code INTERNAL_ERROR} if the state cannot be read
+   */
+  public MigrationStatus status() {
     try {
-      return flyway.info().pending().length;
+      MigrationInfoService info = flyway.info();
+      int future = 0;
+      for (MigrationInfo migration : info.all()) {
+        if (migration.getState().name().startsWith("FUTURE")) {
+          future++;
+        }
+      }
+      return new MigrationStatus(info.pending().length, future);
     } catch (FlywayException e) {
       throw new InfrastructureException(ErrorCode.INTERNAL_ERROR, e);
     }
