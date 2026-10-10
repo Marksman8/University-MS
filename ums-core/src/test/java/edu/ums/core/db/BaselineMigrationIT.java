@@ -35,7 +35,7 @@ class BaselineMigrationIT {
 
   @Test
   void migratesBlankDatabaseAndSecondRunIsANoOp() {
-    assertThat(firstRun).isEqualTo(1);
+    assertThat(firstRun).isEqualTo(2); // V1 baseline + V2 listener grants
     assertThat(secondRun).isZero();
     assertThat(runner.pendingCount()).isZero();
   }

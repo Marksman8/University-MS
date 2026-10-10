@@ -4,7 +4,7 @@
 -- already exist:
 --
 --   psql -h localhost -U postgres -d ums -v ON_ERROR_STOP=1 \
---        -v owner_pw=... -v app_pw=... -v console_pw=... -v backup_pw=... \
+--        -v owner_pw=... -v app_pw=... -v console_pw=... -v listener_pw=... -v backup_pw=... \
 --        -f scripts/db/create_roles.sql
 --
 -- Passwords come only from psql variables; nothing is hard-coded.
@@ -13,8 +13,9 @@
 --   ums_owner        owns the database and schema ums; Flyway migrations run as this role
 --   ums_app          the application (DML on all tables, sequences)
 --   ums_dev_console  dev query console: read-only by default, statement_timeout 15s
+--   ums_listener     dedicated LISTEN connection: no default privileges; V2 grants USAGE on ums and
+--                    SELECT on ums.activity_log only
 --   ums_backup       pg_dump: read-only
--- The listener connection logs in as ums_app (no separate role in the P0 role list).
 
 \set ON_ERROR_STOP on
 
@@ -30,6 +31,10 @@
 \else
   DO $$ BEGIN RAISE EXCEPTION 'create_roles.sql: psql variable console_pw is required'; END $$;
 \endif
+\if :{?listener_pw}
+\else
+  DO $$ BEGIN RAISE EXCEPTION 'create_roles.sql: psql variable listener_pw is required'; END $$;
+\endif
 \if :{?backup_pw}
 \else
   DO $$ BEGIN RAISE EXCEPTION 'create_roles.sql: psql variable backup_pw is required'; END $$;
@@ -39,6 +44,7 @@
 SELECT set_config('ums.owner_pw',   :'owner_pw',   false) IS NOT NULL
    AND set_config('ums.app_pw',     :'app_pw',     false) IS NOT NULL
    AND set_config('ums.console_pw', :'console_pw', false) IS NOT NULL
+   AND set_config('ums.listener_pw', :'listener_pw', false) IS NOT NULL
    AND set_config('ums.backup_pw',  :'backup_pw',  false) IS NOT NULL AS passwords_staged \gset
 
 -- 1. Roles ----------------------------------------------------------------------------------
@@ -50,6 +56,7 @@ BEGIN
     SELECT * FROM (VALUES ('ums_owner',       'ums.owner_pw'),
                           ('ums_app',         'ums.app_pw'),
                           ('ums_dev_console', 'ums.console_pw'),
+                          ('ums_listener',    'ums.listener_pw'),
                           ('ums_backup',      'ums.backup_pw')) AS t(role_name, setting)
   LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r.role_name) THEN
@@ -66,6 +73,7 @@ $$;
 SELECT set_config('ums.owner_pw', '', false) = ''
    AND set_config('ums.app_pw', '', false) = ''
    AND set_config('ums.console_pw', '', false) = ''
+   AND set_config('ums.listener_pw', '', false) = ''
    AND set_config('ums.backup_pw', '', false) = '' AS passwords_cleared \gset
 
 ALTER ROLE ums_dev_console SET statement_timeout = '15s';
@@ -75,7 +83,7 @@ DO $$
 BEGIN
   EXECUTE format('ALTER DATABASE %I OWNER TO ums_owner', current_database());
   EXECUTE format('REVOKE ALL ON DATABASE %I FROM PUBLIC', current_database());
-  EXECUTE format('GRANT CONNECT ON DATABASE %I TO ums_app, ums_dev_console, ums_backup',
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO ums_app, ums_dev_console, ums_listener, ums_backup',
                  current_database());
 END
 $$;

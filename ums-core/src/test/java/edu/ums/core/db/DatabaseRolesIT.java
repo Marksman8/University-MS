@@ -101,10 +101,10 @@ class DatabaseRolesIT {
         ResultSet rs =
             st.executeQuery(
                 "SELECT count(*) FROM pg_roles WHERE rolname IN"
-                    + " ('ums_owner','ums_app','ums_dev_console','ums_backup')"
+                    + " ('ums_owner','ums_app','ums_dev_console','ums_listener','ums_backup')"
                     + " AND NOT rolsuper AND NOT rolcreaterole AND NOT rolcreatedb AND rolcanlogin")) {
       rs.next();
-      assertThat(rs.getLong(1)).isEqualTo(4);
+      assertThat(rs.getLong(1)).isEqualTo(5);
     }
   }
 
