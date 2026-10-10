@@ -10,7 +10,7 @@ Build the backend of a University Management System for one institution, from sc
 
 - Tier: **full production** (feature flags, health checks, alerts, backups, mutation/load/soak testing, privacy requests).
 - Fees are **out of scope** for this release.
-- Java 21, Maven 3.9+, PostgreSQL 16, Windows + Fedora Linux.
+- Java 21, Maven 3.9+, PostgreSQL 18, Windows + Fedora Linux.
 - Defaults (configurable): credit limit 26/term; attendance threshold 75 %; attendance edit window 48 h; lockout after 5 failures for 15 min; session idle 30 min; 10-point grade scale O≥90→10, A+≥80→9, A≥70→8, B+≥60→7, B≥50→6, C≥45→5, P≥40→4, F<40→0.
 - Decided rules: **repeat attempts — all attempts count in CGPA** (each attempt is its own enrolment and result; credits earned count once, from the passing attempt; both attempts on the transcript). **Early grading** — Admin may move a term to GRADING before its end date only with explicit confirmation (`confirmEarly = true`), else `CONFIRMATION_REQUIRED`.
 
@@ -177,7 +177,7 @@ As in DESIGN.md §Time and space complexity — e.g. registration checks O(log n
 
 ## 14. Testing (gates from SDLC.md)
 
-Unit, jqwik property (classifier, grade/GPA, state machines, slot clash, validators), ArchUnit, integration on PostgreSQL 16, contract (facade DTO shapes + error codes), concurrency (`ConcurrencyHarness`; 50 repeats nightly), failure injection, acceptance (`AC_*`), JaCoCo ≥ 80 % service/domain, PIT ≥ 70 % before release, SpotBugs+FindSecBugs 0 high, OWASP Dependency-Check 0 high CVEs, Gitleaks 0, load p95 < 200 ms at 10,000 students, 1 h soak flat heap, localisation keys complete. Test data only from `ums-testkit`.
+Unit, jqwik property (classifier, grade/GPA, state machines, slot clash, validators), ArchUnit, integration on PostgreSQL 18, contract (facade DTO shapes + error codes), concurrency (`ConcurrencyHarness`; 50 repeats nightly), failure injection, acceptance (`AC_*`), JaCoCo ≥ 80 % service/domain, PIT ≥ 70 % before release, SpotBugs+FindSecBugs 0 high, OWASP Dependency-Check 0 high CVEs, Gitleaks 0, load p95 < 200 ms at 10,000 students, 1 h soak flat heap, localisation keys complete. Test data only from `ums-testkit`.
 
 ## 15. Phases
 

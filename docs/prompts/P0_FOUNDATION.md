@@ -174,13 +174,13 @@ Include complexity table for every class from Steps 8–11, error mapping table,
 
 `.github/workflows/ci.yml`:
 - `push` (all branches): checkout, `actions/setup-java` (Temurin 21, Maven cache), `mvn -B -Pfast verify`, Gitleaks action.
-- `pull_request`: service `postgres:16` with health check; run `scripts/db/create_roles.sql` via `psql` with passwords from repository secrets; create `ums_test`; `mvn -B verify`; upload Surefire/Failsafe/JaCoCo/SpotBugs/licence reports as artifacts; run Dependency-Check if `NVD_API_KEY` secret is set.
+- `pull_request`: service `postgres:18` with health check; run `scripts/db/create_roles.sql` via `psql` with passwords from repository secrets; create `ums_test`; `mvn -B verify`; upload Surefire/Failsafe/JaCoCo/SpotBugs/licence reports as artifacts; run Dependency-Check if `NVD_API_KEY` secret is set.
 - `schedule` nightly at 21:30 UTC (03:00 IST): `mvn -B verify -Pnightly` + Dependency-Check + PIT report (non-blocking until P7).
 - Never print secrets; use `::add-mask::` for any generated value.
 
 ## Step 14 — Documentation · `docs: readme, adrs and runbook skeleton`
 
-- `README.md`: prerequisites (JDK 21, Maven 3.9+, PostgreSQL 16, gitleaks), database setup (create `ums`, `ums_test`, run roles script), env vars, install hooks, build, run, test commands, module map.
+- `README.md`: prerequisites (JDK 21, Maven 3.9+, PostgreSQL 18, gitleaks), database setup (create `ums`, `ums_test`, run roles script), env vars, install hooks, build, run, test commands, module map.
 - `docs/adr/001…009` from DESIGN.md §Decision records — each with Status (Accepted), Context, Decision, Consequences, Alternatives.
 - `docs/runbook.md` headings: start/stop, health, backup, restore, incidents, rollback (filled in P6).
 - `CHANGELOG.md` `[Unreleased]` lists P0 additions.

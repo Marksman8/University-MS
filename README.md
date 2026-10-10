@@ -1,6 +1,6 @@
 # UMS — University Management System (backend)
 
-Java 21 · Maven 3.9+ · PostgreSQL 16 · modular monolith.
+Java 21 · Maven 3.9+ · PostgreSQL 18 · modular monolith.
 
 > Skeleton. Full setup, run and test instructions arrive in P0 Step 14.
 
