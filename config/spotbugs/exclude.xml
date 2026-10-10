@@ -13,4 +13,37 @@
     <Class name="edu.ums.platform.config.AppConfig$DbAccount"/>
     <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
   </Match>
+
+  <!--
+    P0 Step 6. BaseRepository is the Template Method base: subclasses pass constant SQL text and
+    every value is bound through PreparedStatement parameters. The only concatenated identifiers
+    (casState table, keyset columns) are validated by SqlIdentifiers.
+  -->
+  <Match>
+    <Class name="edu.ums.platform.db.BaseRepository"/>
+    <Or>
+      <Method name="queryList"/>
+      <Method name="queryPage"/>
+      <Method name="update"/>
+      <Method name="batch"/>
+    </Or>
+    <Bug pattern="SQL_INJECTION_JDBC"/>
+  </Match>
+
+  <!--
+    P0 Step 6. DataSources exists to share its two pools; Tx exists to share the transaction's
+    connection with repositories. Copies are impossible by design.
+  -->
+  <Match>
+    <Class name="edu.ums.platform.db.DataSources"/>
+    <Or>
+      <Method name="app"/>
+      <Method name="console"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="edu.ums.platform.db.Tx"/>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
 </FindBugsFilter>
