@@ -33,11 +33,17 @@ $env:UMS_BACKUP_DB_PASSWORD = 'it-backup'
 
 ## 3. Build, seed, run
 
+Maven is not required on the PATH: the repo's local copy lives in `.tools\apache-maven-3.9.9`
+(use plain `mvn` instead if you have Maven installed).
+
 ```powershell
-mvn -q -DskipTests -DskipITs install
-mvn -pl ums-app exec:java "-Dexec.args=--seed-demo"
-mvn -pl ums-ui javafx:run
+.\.tools\apache-maven-3.9.9\bin\mvn.cmd -q -DskipTests -DskipITs install
+.\.tools\apache-maven-3.9.9\bin\mvn.cmd -pl ums-app exec:java "-Dexec.args=--seed-demo"
+.\.tools\apache-maven-3.9.9\bin\mvn.cmd -pl ums-ui javafx:run
 ```
+
+`--seed-demo` exits with "app_user is not empty" if the database is already seeded; that is
+fine, go straight to the last command.
 
 To start again from scratch, drop and re-create the database (step 1 after
 `DROP DATABASE ums_proto WITH (FORCE)`), then seed again.
