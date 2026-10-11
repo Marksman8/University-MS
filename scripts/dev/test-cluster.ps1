@@ -15,13 +15,14 @@ param(
     [ValidateSet('init', 'start', 'stop', 'status', 'roles', 'env')]
     [string]$Command = 'status',
     [string]$PgBin = $env:UMS_PG_BIN,
-    [int]$Port = 55432
+    [int]$Port = 55432,
+    [string]$Database = 'ums_test'
 )
 $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $data = Join-Path $root '.tools\pg18-it'
-$database = 'ums_test'
+$database = $Database
 $passwords = [ordered]@{
     owner_pw = 'it-owner'; app_pw = 'it-app'; console_pw = 'it-console'
     listener_pw = 'it-listener'; backup_pw = 'it-backup'

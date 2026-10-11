@@ -1,8 +1,10 @@
 package edu.ums.app;
 
+import edu.ums.api.UmsClient;
 import edu.ums.platform.config.AppConfig;
 import edu.ums.platform.config.ConfigLoader;
 import edu.ums.platform.config.ConfigSource;
+import edu.ums.platform.config.Environment;
 import edu.ums.platform.db.DataSources;
 import edu.ums.platform.db.MigrationRunner;
 import edu.ums.platform.error.ConstraintErrorMap;
@@ -36,6 +38,13 @@ public final class UmsRuntime {
   public UmsRuntime(ConfigSource source, Map<String, String> environment) {
     this.source = Objects.requireNonNull(source, "source");
     this.environment = Map.copyOf(environment);
+  }
+
+  /** A runtime reading the classpath configuration and the process environment. */
+  public static UmsRuntime fromEnvironment() {
+    return new UmsRuntime(
+        new edu.ums.platform.config.ClasspathConfigSource(UmsRuntime.class.getClassLoader()),
+        System.getenv());
   }
 
   /**
@@ -104,6 +113,42 @@ public final class UmsRuntime {
       throw new IllegalStateException("UMS is not running");
     }
     return current.health().check();
+  }
+
+  /**
+   * The prototype client.
+   *
+   * @throws IllegalStateException if not started
+   */
+  public UmsClient client() {
+    return running().proto().client();
+  }
+
+  /**
+   * Seeds the demo dataset. Refused unless the environment is LOCAL or TEST.
+   *
+   * @return {@code false} if users already exist (nothing written)
+   * @throws IllegalStateException if not started or in another environment
+   */
+  public boolean seedDemo() {
+    AppContext current = running();
+    Environment env = current.config().environment();
+    if (env != Environment.LOCAL && env != Environment.TEST) {
+      throw new IllegalStateException("--seed-demo is allowed only when UMS_ENV is LOCAL or TEST");
+    }
+    return current.proto().seeder().seed();
+  }
+
+  /** The environment UMS runs in. */
+  public Environment environment() {
+    return running().config().environment();
+  }
+
+  private synchronized AppContext running() {
+    if (context == null) {
+      throw new IllegalStateException("UMS is not running");
+    }
+    return context;
   }
 
   private static DataSources openPools(AppConfig config, SqlErrorMapper sqlErrors) {

@@ -1,5 +1,6 @@
 package edu.ums.app;
 
+import edu.ums.app.proto.ProtoModule;
 import edu.ums.platform.concurrent.ManagedExecutors;
 import edu.ums.platform.concurrent.RejectionMode;
 import edu.ums.platform.concurrent.Scheduler;
@@ -21,6 +22,7 @@ import edu.ums.platform.observe.HealthService;
 import edu.ums.platform.observe.MetricsRegistry;
 import edu.ums.platform.observe.Readiness;
 import edu.ums.platform.observe.Tracer;
+import edu.ums.proto.auth.service.PasswordHasher;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
@@ -51,6 +53,7 @@ public final class AppContext {
   private final Tracer tracer;
   private final MetricsRegistry metrics;
   private final FacadeProxyFactory facades;
+  private final ProtoModule proto;
 
   AppContext(
       AppConfig config,
@@ -84,6 +87,23 @@ public final class AppContext {
             probes,
             PROBE_TIMEOUT,
             Clock.systemUTC());
+    this.proto =
+        new ProtoModule(
+            config,
+            dataSources,
+            transactions,
+            sqlErrors,
+            apiErrors,
+            facades,
+            tracer,
+            metrics,
+            health,
+            PasswordHasher.COST);
+  }
+
+  /** The prototype slice (branch prototype/full-slice only). */
+  public ProtoModule proto() {
+    return proto;
   }
 
   public AppConfig config() {

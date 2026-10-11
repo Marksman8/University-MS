@@ -17,6 +17,7 @@
     <module>ums-testkit</module>
     <module>ums-core</module>
     <module>ums-app</module>
+    <module>ums-ui</module>
   </modules>
 
   <properties>
@@ -29,6 +30,9 @@
     <hikaricp.version>7.1.0</hikaricp.version>
     <flyway.version>13.10.0</flyway.version>
     <jbcrypt.version>0.4</jbcrypt.version>
+    <!-- prototype/full-slice only: JavaFX desktop UI (GPL-2.0 with Classpath Exception) -->
+    <javafx.version>21.0.12</javafx.version>
+    <javafx-maven-plugin.version>0.0.8</javafx-maven-plugin.version>
     <jackson.version>2.22.3</jackson.version>
     <slf4j.version>2.0.20</slf4j.version>
     <logback.version>1.6.5</logback.version>
@@ -89,6 +93,16 @@
 
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>org.openjfx</groupId>
+        <artifactId>javafx-controls</artifactId>
+        <version>${javafx.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>edu.ums</groupId>
+        <artifactId>ums-app</artifactId>
+        <version>${project.version}</version>
+      </dependency>
       <!-- Internal modules -->
       <dependency>
         <groupId>edu.ums</groupId>
@@ -231,6 +245,11 @@
   <build>
     <pluginManagement>
       <plugins>
+        <plugin>
+          <groupId>org.openjfx</groupId>
+          <artifactId>javafx-maven-plugin</artifactId>
+          <version>${javafx-maven-plugin.version}</version>
+        </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-clean-plugin</artifactId>

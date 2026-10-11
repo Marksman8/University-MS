@@ -31,6 +31,10 @@ public final class Main {
       runtime.stop();
       return;
     }
+    if (Arrays.asList(args).contains("--seed-demo")) {
+      seedDemo(runtime);
+      return;
+    }
     CountDownLatch stopped = new CountDownLatch(1);
     Runtime.getRuntime()
         .addShutdownHook(
@@ -41,5 +45,20 @@ public final class Main {
                 },
                 "ums-shutdown"));
     stopped.await();
+  }
+
+  /** Prototype: seeds the demo data, then stops. Exits non-zero when refused. */
+  private static void seedDemo(UmsRuntime runtime) {
+    boolean seeded;
+    try {
+      seeded = runtime.seedDemo();
+    } finally {
+      runtime.stop();
+    }
+    if (!seeded) {
+      LOG.error("--seed-demo refused: app_user is not empty");
+      System.exit(2);
+    }
+    LOG.info("Demo data seeded (password for every demo user is in README_DEMO.md)");
   }
 }
