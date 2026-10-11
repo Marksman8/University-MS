@@ -33,6 +33,7 @@ public final class JdbcConsoleRepository implements ConsoleRepository {
   public QueryResult run(String sql) {
     long started = System.nanoTime();
     try (Connection c = console.getConnection()) {
+      c.setAutoCommit(false);
       c.setReadOnly(true);
       try (Statement st = c.createStatement()) {
         st.setMaxRows(MAX_ROWS + 1);
