@@ -41,6 +41,10 @@
         <artifactId>javafx-maven-plugin</artifactId>
         <configuration>
           <mainClass>edu.ums.ui.UmsDesktopApp</mainClass>
+          <options>
+            <!-- software pipeline: the D3D pipeline painted a blank window on the dev machine -->
+            <option>-Dprism.order=sw</option>
+          </options>
         </configuration>
       </plugin>
     </plugins>
